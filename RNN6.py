@@ -1,391 +1,202 @@
-from collections import Counter
-import tensorflow
-from tensorflow import keras
-from keras import backend as K
-from keras.layers import *
-import numpy as np
-from keras.utils import np_utils, to_categorical
-
-import argparse
-import os
-from os import walk
-from sklearn import preprocessing
-from sklearn.metrics import log_loss, auc, roc_curve
-
-from sklearn import preprocessing
-le = preprocessing.LabelEncoder()
-from numpy import array
-import pickle
-import re
-import glob
-import datetime
-import tensorflow as tf
-import itertools
-import math
-import random
-from collections import Counter
-#from keras import keras_metrics
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
-
-from sklearn.preprocessing import Normalizer
-
-from numpy.random import seed
-
-import matplotlib.pyplot as plt
-
-from keras.callbacks import EarlyStopping
-from imblearn.over_sampling import SMOTE
-
-
-from numpy.random import seed
-
-
-
-from keras.utils.data_utils import get_file
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, LSTM,SimpleRNN
-
-SEED = 123 #used to help randomly select the data points
-
-
-
-
-
-
-
-
-from numpy.random import seed
-seed(7)
-
-
-
-
-
-
-
-
-
-SEED = 123 #used to help randomly select the data points
-
-
-early_stopping_monitor = EarlyStopping(patience=2)
-
-
-## Import dependencies
-
-## Set random seeds for reproducibility
-np.random.seed(123)
-random.seed(123)
-
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 import time
+import os, sys
+import pandas as pd
+import numpy as np
+#import cv2
+#from tqdm import tqdm
+from sklearn import preprocessing
+#import splitfolders
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+import warnings
+warnings.filterwarnings('ignore') 
+#DataPath of your CICDDOS CSV files.
+import random
+DataPath = '/home/abdullah/Downloads/Dataset_Final'
+
+#Get List of files in this directory by names.
+FilesList = os.listdir(DataPath)
 
 
-#using the specfied columns
-COLUMN_TO_STANDARDIZE = [
-                'Protocol',
-        		'Flow Duration',
-     
-                'Flow Byts/s',	
-                'Flow Pkts/s',	
-     
-                'Fwd Pkts/s',	
-                'Bwd Pkts/s',	
-                
-                'Label'
-
-
-
-]
-
-
-
-
-
-
-
-
-
-# uncomment if you want to merge all the data together, so you can read it from one excel file
-wd = "./"
-cicids_files = "*.csv"
-
-print("Reading inSDN data...")
-# files = glob.glob('C:/Users/bbb/PycharmProjects/RNN/dataset/*.csv')
-files = glob.glob('/home/abdullah/Desktop/InSDN_DatasetCSV/*.csv')
-
-print(files)
 cicids_data = []
-for ff in files:
-     cicids_data.append(pd.read_csv(ff, encoding="Latin1", usecols=COLUMN_TO_STANDARDIZE))
+for FileName in FilesList:
+  if FileName.endswith(".csv"):
+    print(FileName)
+    p = 0.01  # 1% of the lines
+    df = pd.read_csv(DataPath +'/'+FileName,  low_memory=False)#
+    df.drop(labels=['Unnamed: 0', 'Flow ID', ' Source IP', ' Source Port', ' Destination IP', ' Destination Port','SimillarHTTP', ' Timestamp'], axis=1, errors='ignore', inplace=True)
+   #Replacing the infinity values with NaN.
+    df = df.replace([np.inf, -np.inf], np.nan)
+    #Dropping NaN values.
+    df.dropna(inplace=True)#axis : {0 or ‘index’, 1 or ‘columns’}, default 0
+    cicids_data.append(df)
+
+ 
+#print(cicids_data)    
 cicids_data = pd.concat(cicids_data)
-
-
-cicids_data = cicids_data.rename(columns={' Label': 'Label'})
-
+cicids_data = cicids_data.rename(columns={' Label': 'label'})
 dataframe=cicids_data.copy()
 
-print(dataframe)
+#print(dataframe)
+print(dataframe.head(10))
 print('sucess')
 
 dataframe.to_csv('data.csv')
-# #
 
-#reading data from data.csv, usecols for reading only specified features
-dataframe = pd.read_csv("data.csv",usecols=COLUMN_TO_STANDARDIZE)
+df = dataframe
+df.drop(labels=['Unnamed: 0', 'Flow ID', ' Source IP', ' Source Port', ' Destination IP', ' Destination Port','SimillarHTTP', ' Timestamp'], axis=1, errors='ignore', inplace=True)
+#Replacing the infinity values with NaN.
+
+df = df.replace([np.inf, -np.inf], np.nan)
+#Dropping NaN values.
+df.dropna(inplace=True)#axis : {0 or ‘index’, 1 or ‘columns’}, default 0
+
+#df = df.rename(columns={' Label': 'Label'})
+df.loc[df['label'] != 'BENIGN', 'label'] = 0
+df.loc[df['label'] == 'BENIGN', 'label'] = 1
 
 
-#choose which classes you want in your dataset, what it does exactly is filtering and taking only rows with specified label names
-dataframe = dataframe.loc[(dataframe.Label == "DDos") |(dataframe.Label == "DoS") | (dataframe.Label == "U2R") |(dataframe.Label == "BFA") |(dataframe.Label == "Probe") |(dataframe.Label == "Web-Attack") |(dataframe.Label == "BOTNET") |(dataframe.Label == "Normal")]
-
-
+print ("number of colummns %d" %(len(df.columns.values)))
+print ("number of rows %d" %(len(df.index.values)))
 #print availbe classes after filtering
-print(dataframe['Label'].count())
+print(df['label'].count()) 
 
-#to calculate how many DoS, Normal, DDoS, probe, web attack 
-# print("DoS labels count is ", dataframe[dataframe['Label']=='DDoS'].count())
+#extracting the features and labels from the dataframe
 
-labeltrain=dataframe['Label']
+X, y  = df.drop('label', axis=1), df.pop('label').values
+X = X.astype('float32')
+y = np.array(y).astype(int)
 
-#change normal class to 0 and DDoS to 1
-newlabel_train=labeltrain.replace({'Normal':0,'DDoS':1,'DoS':1,'BOTNET':1,'U2R':1,'BFA':1,'Probe':1,'Web-Attack':1 })
-
-#put the values back in the values of the dataframe labels
-dataframe['Label']=newlabel_train
-
-
-
-#here I removed labels from the columns to standardize because labels are either 0 or 1 and they don't need standrdizing
-COLUMN_TO_STANDARDIZE = [
-                'Protocol',
-        		'Flow Duration',
-               
-                'Flow Byts/s',	
-                'Flow Pkts/s',	
-          
-                'Fwd Pkts/s',	
-                'Bwd Pkts/s',	
-                
-
-]
-
-
-#they might behave badly if the individual features do not more or less look like standard normally distributed data: Gaussian with zero mean and unit variance.
-dataframe[COLUMN_TO_STANDARDIZE] = preprocessing.StandardScaler().fit_transform(dataframe[COLUMN_TO_STANDARDIZE])
-
-
-
-
-
-
-
-
-
-
-
-#Dividing attack and normal traffic
-dataframeAttack = dataframe.loc[(dataframe.Label == 1)]
-dataframeNormal = dataframe.loc[(dataframe.Label == 0)]
-
-
-#Dividing the attack traffic 80% for training and 20% for testing
-training_df_attack, testing_df_attack = train_test_split(dataframeAttack , test_size=0.2)
-
-#Diving the normal traffic 80% for training and 20% for testing
-training_df_normal, testing_df_normal = train_test_split(dataframeNormal , test_size=0.2)
-
-
-#appending the train traffics of normal and attacks together
-dataframe_train = training_df_attack.append(training_df_normal)
-
-#appending the test traffics of normal and attacks together
-dataframe_test = testing_df_attack.append(testing_df_normal)
 
 
 #using shuffle for training data, it is recommended to avoid having the normal traffic or attack traffic in a sequence
 from sklearn.utils import shuffle
-dataframe_train = shuffle(dataframe_train)
-dataframe_train = shuffle(dataframe_train)
-dataframe_train = shuffle(dataframe_train)
-dataframe_train = shuffle(dataframe_train)
-dataframe_train = shuffle(dataframe_train)
+df = shuffle(df)
+df = shuffle(df)
+df = shuffle(df)
+df = shuffle(df)
+df = shuffle(df)
+
+df = df.reset_index()
+del df['index']
 
 
-dataframe_train = dataframe_train.reset_index()
-del dataframe_train['index']
+#Dividing the attack traffic 80% for training and 20% for testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.20)
+print(X_train.shape, X_test.shape, y_train.shape, y_test.shape)
+unique, counts = np.unique(y_test, return_counts=True)
+print("unique, counts =", unique, counts)
 
+# determine the number of input features
+n_features = X_train.shape[1]
 
+# define the keras model
 
-# uncomment to check the number of DDoS samples in training and testing dataframes
-print("DDoS labels count ON THE DATAFRAME_TRAIN is ", dataframe_train[dataframe_train['Label']==1].count())
-print("DDoS labels count ON THE DATAFRAME_TEST is ", dataframe_test[dataframe_test['Label']==1].count())
-
-
-
-#extracting the features and labels from training dataframe
-x_train,y_train=dataframe_train,dataframe_train.pop('Label').values
-
-#----------------------------------------------------- oversampling the data set for the minorty classes
-oversample = SMOTE()
-x_train, y_train= oversample.fit_resample(x_train, y_train)
-#--------------------------------------------------------
-
-#added new
-y_train = pd.get_dummies(y_train)
-
-x_train=x_train.values
-
-#changing datatype from float64 to float32
-x_train = np.array(x_train).astype(np.float32)
-
-y_train = np.array(y_train).astype(int)
-
-
-#extracting the features and labels from testing dataframe
-x_test,y_test=dataframe_test,dataframe_test.pop('Label').values
-
-
-x_test=x_test.values
-
-x_test = np.array(x_test).astype(np.float32)
-
-y_test = pd.get_dummies(y_test)
-print('y_test after getting the dummies are',y_test)
-y_test=y_test.values
-y_test = np.array(y_test).astype(int)
-
-
-#number of selected features
-n_features = 6
-timesteps = 1
-
-#changeing the dimension of the training and testing data to 3 dimension to fit as an input to the neural network
-x_train_3d = x_train.reshape(x_train.shape[0], timesteps, n_features)
-x_test_3d = x_test.reshape(x_test.shape[0], timesteps, n_features)
-
-if tf.test.gpu_device_name(): 
-
-    print('Default GPU Device:{}'.format(tf.test.gpu_device_name()))
-
-else:
-
-   print("Please install GPU version of TF")
-
-
-# initializing the model
-model = keras.Sequential()
-
-
-# replace GRU with SimpleRNN if you want to use RNN
-
-#adding input layer and GRU layer in one step
-model.add(SimpleRNN(6, input_shape=(x_train_3d.shape[1:]), activation='relu', return_sequences=True))
-#adding dropout to avoid overfit
-model.add(Dropout(0.2))
-
-model.add(SimpleRNN(6, activation='relu',return_sequences=True))
-model.add(Dropout(0.1))
-model.add(SimpleRNN(4, activation='relu',return_sequences=True))
-model.add(Dropout(0.1))
-model.add(SimpleRNN(2, activation='relu'))
-model.add(Dropout(0.1))
-
-
-#adding output layer with softmax activation function with units 0 for normal and 1 for attack
-model.add(Dense(2,activation='sigmoid'))
-
-
-#using an adam optimizer
-opt = tf.keras.optimizers.Adam(lr=0.001, decay=1e-6)
-print (tf.config.experimental.list_physical_devices())
-# Compile model
-model.compile(
-    loss='mse',
-    optimizer=opt,
-    metrics=['accuracy'],
-)
-
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+model = Sequential()
+model.add(Dense(8, input_shape=(n_features,), activation='relu'))
+model.add(Dense(4, activation='relu'))
+model.add(Dense(1, activation='sigmoid'))
+# compile the keras model
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 model.summary()
-
 #initializing time instance to calculate the trianing time
 start_time = time.time()
 
-#training my model with 30 epochs and using testing data for validation
-history = model.fit(x_train_3d,
-          y_train,
-          epochs=10,
-          batch_size = 100,
-          validation_data=(x_test_3d, y_test))
-
+# fit the keras model on the dataset
+history = model.fit(X_train, y_train, epochs=10, batch_size=32, shuffle=True, validation_data=(X_test, y_test))
 
 print("--- %s seconds ---" % (time.time() - start_time))
+print(history.history.keys())
+
+loss, acc = model.evaluate(X_test, y_test, verbose=0)
+print('Test Accuracy: %.3f' % acc)
+print('Test loss: %.3f' % loss)
+
+#lets plot the train and val curve
+#get the details form the history object
+
+acc = history.history['accuracy']
+val_acc = history.history['val_accuracy']
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+epochs = range(1, len(acc) + 1)
+
+#Train and validation accuracy
+plt.plot(epochs, acc, 'b', label='Training accurarcy')
+plt.plot(epochs, val_acc, 'r', label='Validation accurarcy')
+plt.title('Training and Validation accurarcy')
+plt.legend()
 
 
 
-predictions = model.predict(x_test_3d)
+plt.figure()
+#Train and validation loss
+plt.plot(epochs, loss, 'b', label='Training loss')
+plt.plot(epochs, val_loss, 'r', label='Validation loss')
+plt.title('Training and Validation loss')
+plt.legend()
 
+plt.show()
 
-
-
+predictions = model.predict(X_test)
 #this step is necessary if you used to predict the labels of a 3 dimensional data
-predicted = np.argmax(predictions, axis = 1)
+predicted = np.rint(predictions)
+
+(unique, counts) = np.unique(predicted, return_counts=True)
+print("unique, counts =", unique, counts)
+
+
 # predicted = predictions
 print("predicted labels are ",predicted)
+print("actual labels are ",y_test)
 print(predicted.dtype)
 print(predicted.shape)
 
-
-true_lbls = np.argmax(y_test, axis=1)
-print(true_lbls.dtype)
-print(true_lbls.shape)
-print("true labels are",true_lbls)
-
-
-
-#plot history: accuracy
-plt.plot(history.history['val_loss'])
-plt.title('Validation loss history DDoS GRU')
-plt.ylabel('Loss value')
-plt.xlabel('No. epoch')
-plt.show()
-
-# Plot history: Accuracy
-plt.plot(history.history['val_accuracy'])
-plt.title('Validation accuracy history DDoS GRU')
-plt.ylabel('Accuracy value (%)')
-plt.xlabel('No. epoch')
-plt.show()
-
-
-
-
-
 #calculating metrics 
-from sklearn.metrics import confusion_matrix,accuracy_score,recall_score,precision_score,f1_score,roc_curve, roc_auc_score
-accuracy = accuracy_score(true_lbls,predicted, normalize=True)
-print('accuracy_score is',accuracy)
-precision = precision_score(true_lbls,predicted)
-print("precision is ", precision )
-recall = recall_score(true_lbls,predicted)
-print("recall is", recall )
-f1Score = f1_score(true_lbls,predicted)
-print("f1_score is",f1Score)
-false_positive_rate1, true_positive_rate1, threshold1 = roc_curve(true_lbls,predicted)
-print('roc_auc_score for LSTM: ', roc_auc_score(true_lbls,predicted))
+from sklearn.metrics import confusion_matrix,accuracy_score,recall_score,precision_score,f1_score, roc_curve, roc_auc_score
 
+accuracy = accuracy_score(y_test,predicted)
+print('accuracy_score is',accuracy)
+precision = precision_score(y_test,predicted)
+print("precision is ", precision )
+recall = recall_score(y_test,predicted)
+print("recall is", recall )
+f1Score = f1_score(y_test,predicted)
+print("f1_score is",f1Score)
+
+false_positive_rate1, true_positive_rate1, threshold1 = roc_curve(y_test,predicted)
+print('roc_auc_score for DNN: ', roc_auc_score(y_test,predicted))
+print(false_positive_rate1, true_positive_rate1)
+confusion_matrix = confusion_matrix(y_test,predicted)
+print ("confusion_matrix",confusion_matrix)
+from mlxtend.plotting import plot_confusion_matrix
+import matplotlib.pyplot as plt
+import matplotlib
+
+font = {
+'family': 'Times New Roman',
+'size': 12
+}
+matplotlib.rc('font', **font)
+
+fig, ax =plot_confusion_matrix(conf_mat=confusion_matrix, figsize=(8, 8), show_normed=True)
+#PCM=ax.get_children()
+#plt.colorbar(PCM)
+#plt.tight_layout()
+plt.show()
 
 plt.subplots(1, figsize=(10,10))
-plt.title('Receiver Operating Characteristic - LSTM')
+plt.title('Receiver Operating Characteristic - DNN')
 plt.plot(false_positive_rate1, true_positive_rate1)
 plt.plot([0, 1], ls="--")
 plt.plot([0, 0], [1, 0] , c=".7"), plt.plot([1, 1] , c=".7")
 plt.ylabel('True Positive Rate')
-plt.xlabel('False Positive Rate',)
+plt.xlabel('False Positive Rate')
 plt.show()
-print(false_positive_rate1, true_positive_rate1)
-
-test_scores = model.evaluate(x_test_3d, y_test, verbose=2)
-print(test_scores)
-print("Test loss:", test_scores[0])
-print("Test accuracy:", test_scores[1])
